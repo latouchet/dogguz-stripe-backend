@@ -7,6 +7,9 @@ require('dotenv').config();
 
 const admin = require('firebase-admin');
 const createStripeAccount = require('./routes/create-stripe-account');
+const getOnboardingLink = require('./routes/get-onboarding-link');
+const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
+
 
 admin.initializeApp({
   credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)),
@@ -18,6 +21,8 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 app.use(cors());
 app.use(express.json());
 app.use('/', createStripeAccount);
+app.use('/', getOnboardingLink);
+app.use('/', getUidByStripeAccount);
 
 // 1. Crear PaymentIntent (captura manual)
 app.post('/create-payment-intent', async (req, res) => {
