@@ -1,15 +1,23 @@
-// stripe_backend_node/index.js
+// index.js
 
 const express = require('express');
 const Stripe = require('stripe');
 const cors = require('cors');
 require('dotenv').config();
 
+const admin = require('firebase-admin');
+const createStripeAccount = require('./routes/create-stripe-account');
+
+admin.initializeApp({
+  credential: admin.credential.applicationDefault(),
+});
+
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 app.use(cors());
 app.use(express.json());
+app.use('/', createStripeAccount);
 
 // 1. Crear PaymentIntent (captura manual)
 app.post('/create-payment-intent', async (req, res) => {
@@ -62,5 +70,6 @@ app.post('/cancel-payment', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 4242;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
