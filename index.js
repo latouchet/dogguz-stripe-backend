@@ -9,7 +9,7 @@ const admin = require('firebase-admin');
 const createStripeAccount = require('./routes/create-stripe-account');
 
 admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
+  credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)),
 });
 
 const app = express();
