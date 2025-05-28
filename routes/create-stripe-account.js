@@ -11,7 +11,13 @@ router.post('/create-stripe-account', async (req, res) => {
 
   try {
     // 1. Crear cuenta express en Stripe
-    const account = await stripe.accounts.create({ type: 'express' });
+    // 1. Crear cuenta express en Stripe con capacidad de transfers
+	const account = await stripe.accounts.create({
+  		type: 'express',
+  		capabilities: {
+    		transfers: { requested: true },
+  		},
+	});
 
     // 2. Guardar el account.id en Firestore
     await admin.firestore().collection('users').doc(uid).update({
