@@ -10,7 +10,6 @@ const createStripeAccount = require('./routes/create-stripe-account');
 const getOnboardingLink = require('./routes/get-onboarding-link');
 const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
 
-
 admin.initializeApp({
   credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)),
 });
@@ -24,25 +23,22 @@ app.use('/', createStripeAccount);
 app.use('/', getOnboardingLink);
 app.use('/', getUidByStripeAccount);
 
-// 1. Crear PaymentIntent (captura manual)
+// 1. Crear PaymentIntent (solo clientSecret, confirmación en frontend)
 app.post('/create-payment-intent', async (req, res) => {
   try {
-    const { amount, providerStripeAccountId, applicationFee, paymentMethodId } = req.body;
+    const { amount, providerStripeAccountId, applicationFee } = req.body;
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'usd',
       capture_method: 'manual',
-      payment_method: paymentMethodId,
-      confirmation_method: 'manual',
-      confirm: true,
       application_fee_amount: applicationFee,
       transfer_data: {
         destination: providerStripeAccountId,
       },
     });
 
-    res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
+    res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error) {
     console.error('Error creating payment intent:', error);
     res.status(500).json({ error: error.message });
