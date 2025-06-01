@@ -6,12 +6,15 @@ const cors = require('cors');
 require('dotenv').config();
 
 const admin = require('firebase-admin');
+const serviceAccount = require('./firebase-key.json'); // ✅ Cargar el archivo directamente
+
 const createStripeAccount = require('./routes/create-stripe-account');
 const getOnboardingLink = require('./routes/get-onboarding-link');
 const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
 
+// ✅ Inicializa Firebase con archivo
 admin.initializeApp({
-  credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)),
+  credential: admin.credential.cert(serviceAccount),
 });
 
 const app = express();
