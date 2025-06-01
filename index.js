@@ -1,21 +1,16 @@
-// index.js
-
 const express = require('express');
 const Stripe = require('stripe');
 const cors = require('cors');
 require('dotenv').config();
 
 const admin = require('firebase-admin');
-const serviceAccount = require('./firebase-key.json'); // ✅ Cargar el archivo directamente
+admin.initializeApp({
+  credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)),
+});
 
 const createStripeAccount = require('./routes/create-stripe-account');
 const getOnboardingLink = require('./routes/get-onboarding-link');
 const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
-
-// ✅ Inicializa Firebase con archivo
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -26,11 +21,10 @@ app.use('/', createStripeAccount);
 app.use('/', getOnboardingLink);
 app.use('/', getUidByStripeAccount);
 
-// 1. Crear PaymentIntent (solo clientSecret, confirmación en frontend)
+// Crear PaymentIntent
 app.post('/create-payment-intent', async (req, res) => {
   try {
     const { amount, providerStripeAccountId, applicationFee } = req.body;
-
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'usd',
@@ -40,7 +34,6 @@ app.post('/create-payment-intent', async (req, res) => {
         destination: providerStripeAccountId,
       },
     });
-
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error) {
     console.error('Error creating payment intent:', error);
@@ -48,11 +41,10 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 });
 
-// 2. Capturar pago cuando proveedor acepta
+// Capturar pago
 app.post('/capture-payment', async (req, res) => {
   try {
     const { paymentIntentId } = req.body;
-
     const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
     res.json({ success: true, paymentIntent });
   } catch (error) {
@@ -61,11 +53,10 @@ app.post('/capture-payment', async (req, res) => {
   }
 });
 
-// 3. Cancelar pago si proveedor rechaza o dueño cancela
+// Cancelar pago
 app.post('/cancel-payment', async (req, res) => {
   try {
     const { paymentIntentId } = req.body;
-
     const paymentIntent = await stripe.paymentIntents.cancel(paymentIntentId);
     res.json({ success: true, paymentIntent });
   } catch (error) {
