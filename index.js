@@ -70,14 +70,21 @@ app.post('/cancel-payment', async (req, res) => {
 // Crear PaymentIntent para QR Tag (pago directo sin Stripe Connect)
 app.post('/create-qr-payment', async (req, res) => {
   try {
+    const { amount } = req.body;
+
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({ error: 'Missing or invalid amount' });
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 499, // $4.99 (en centavos)
+      amount: parseInt(amount), // en centavos
       currency: 'usd',
     });
+
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error) {
-    console.error('Error creating QR tag payment:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error creating PaymentIntent:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
