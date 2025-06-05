@@ -14,6 +14,8 @@ const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+console.log("🔐 Stripe secret key in use:", process.env.STRIPE_SECRET_KEY);
+
 
 app.use(cors());
 app.use(express.json());
