@@ -71,7 +71,7 @@ app.post('/cancel-payment', async (req, res) => {
 app.post('/create-qr-payment', async (req, res) => {
   try {
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 100, // $1.00 (en centavos)
+      amount: 499, // $4.99 (en centavos)
       currency: 'usd',
     });
     res.json({ clientSecret: paymentIntent.client_secret });
