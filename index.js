@@ -65,6 +65,20 @@ app.post('/cancel-payment', async (req, res) => {
   }
 });
 
+// Crear PaymentIntent para QR Tag (pago directo sin Stripe Connect)
+app.post('/create-qr-payment', async (req, res) => {
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: 100, // $1.00 (en centavos)
+      currency: 'usd',
+    });
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (error) {
+    console.error('Error creating QR tag payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
