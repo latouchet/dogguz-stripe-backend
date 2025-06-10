@@ -3,8 +3,7 @@ const Stripe = require('stripe');
 const cors = require('cors');
 require('dotenv').config();
 
-const admin = require('firebase-admin');  // ✅ solo una vez
-
+const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
 
@@ -43,7 +42,8 @@ app.use('/', getAccountStatus);
 // Crear PaymentIntent
 app.post('/create-payment-intent', async (req, res) => {
   try {
-    const { amount, providerStripeAccountId, applicationFee } = req.body;
+    const { amount, providerStripeAccountId, applicationFee, reservationId } = req.body;
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'usd',
@@ -53,6 +53,21 @@ app.post('/create-payment-intent', async (req, res) => {
         destination: providerStripeAccountId,
       },
     });
+
+    if (reservationId) {
+      const reservationRef = admin.firestore().collection('reservations').doc(reservationId);
+
+      await reservationRef.update({
+        paymentStatus: 'paid',
+        paymentIntentId: paymentIntent.id,
+        paymentPaidAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`✅ Reservation ${reservationId} updated with paymentStatus = 'paid'`);
+    } else {
+      console.warn('⚠️ No reservationId provided, paymentStatus not updated');
+    }
+
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error) {
     console.error('Error creating payment intent:', error);
@@ -60,12 +75,48 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 });
 
-// Capturar pago
+// Capturar pago (Liberar al proveedor)
 app.post('/capture-payment', async (req, res) => {
   try {
-    const { paymentIntentId } = req.body;
+    const { paymentIntentId, reservationId } = req.body;
+
+    const reservationRef = admin.firestore().collection('reservations').doc(reservationId);
+    const reservationSnap = await reservationRef.get();
+
+    if (!reservationSnap.exists) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    const reservation = reservationSnap.data();
+
+    // Validaciones
+    if (!reservation.checkinPhotoUrl || !reservation.checkoutPhotoUrl) {
+      return res.status(400).json({ error: 'Check-in and Check-out must be completed before releasing payment' });
+    }
+
+    if (reservation.disputeFiled) {
+      return res.status(400).json({ error: 'There is an active dispute, payment cannot be released' });
+    }
+
+    const now = new Date();
+    const paymentAvailableAt = reservation.paymentAvailableAt?.toDate
+      ? reservation.paymentAvailableAt.toDate()
+      : new Date(reservation.paymentAvailableAt);
+
+    if (now < paymentAvailableAt) {
+      return res.status(400).json({ error: `Payment will be available after ${paymentAvailableAt}` });
+    }
+
+    // Todo OK → capturar el pago
     const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
+
+    await reservationRef.update({
+      paymentCaptured: true,
+      paymentCapturedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     res.json({ success: true, paymentIntent });
+
   } catch (error) {
     console.error('Error capturing payment:', error);
     res.status(500).json({ error: error.message });
@@ -94,7 +145,7 @@ app.post('/create-qr-payment', async (req, res) => {
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: parseInt(amount), // en centavos
+      amount: parseInt(amount),
       currency: 'usd',
     });
 
@@ -107,4 +158,5 @@ app.post('/create-qr-payment', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 

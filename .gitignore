@@ -1,1 +1,17 @@
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# .env (ya lo tienes)
 .env
+
+# Service account JSON (esto es CLAVE para tu caso)
+service-account.json
+
+# VSCode config (opcional, si usas VSCode)
+.vscode/
+
