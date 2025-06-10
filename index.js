@@ -3,11 +3,10 @@ const Stripe = require('stripe');
 const cors = require('cors');
 require('dotenv').config();
 
-const admin = require('firebase-admin');
+const admin = require('firebase-admin');  // ✅ solo una vez
 
 const fs = require('fs');
 const path = require('path');
-const admin = require('firebase-admin');
 
 let adminConfig;
 
@@ -33,7 +32,6 @@ const getAccountStatus = require('./routes/get-account-status');
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 console.log("🔐 Stripe secret key in use:", process.env.STRIPE_SECRET_KEY);
-
 
 app.use(cors());
 app.use(express.json());
