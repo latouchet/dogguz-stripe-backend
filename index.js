@@ -4,13 +4,31 @@ const cors = require('cors');
 require('dotenv').config();
 
 const admin = require('firebase-admin');
+
+const fs = require('fs');
+const path = require('path');
+const admin = require('firebase-admin');
+
+let adminConfig;
+
+if (process.env.GOOGLE_CREDENTIALS_JSON) {
+  console.log('🔥 Initializing Firebase Admin with GOOGLE_CREDENTIALS_JSON');
+  adminConfig = admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON));
+} else {
+  console.log('🔥 Initializing Firebase Admin with service-account.json file');
+  const serviceAccountPath = path.resolve(__dirname, 'service-account.json');
+  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+  adminConfig = admin.credential.cert(serviceAccount);
+}
+
 admin.initializeApp({
-  credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)),
+  credential: adminConfig,
 });
 
 const createStripeAccount = require('./routes/create-stripe-account');
 const getOnboardingLink = require('./routes/get-onboarding-link');
 const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
+const getAccountStatus = require('./routes/get-account-status');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -22,6 +40,7 @@ app.use(express.json());
 app.use('/', createStripeAccount);
 app.use('/', getOnboardingLink);
 app.use('/', getUidByStripeAccount);
+app.use('/', getAccountStatus);
 
 // Crear PaymentIntent
 app.post('/create-payment-intent', async (req, res) => {
