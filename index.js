@@ -28,6 +28,7 @@ const getOnboardingLink = require('./routes/get-onboarding-link');
 const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
 const getAccountStatus = require('./routes/get-account-status');
 const captureDuePayments = require('./routes/capture-due-payments');
+const sendReservationReceiptEmail = require('./routes/sendReservationReceiptEmail');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -67,9 +68,32 @@ app.post('/create-payment-intent', async (req, res) => {
         paymentStatus: 'paid',
         paymentIntentId: paymentIntent.id,
         paymentPaidAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
+      });     
       console.log(`✅ Reservation ${reservationId} updated with paymentStatus = 'paid'`);
+      // Leer la reserva completa
+	const reservationSnap = await reservationRef.get();
+	const reservation = reservationSnap.data();
+
+	try {
+	  await sendReservationReceiptEmail({
+	    ownerEmail: reservation.ownerEmail,
+	    ownerName: reservation.ownerName,
+	    providerName: reservation.providerName,
+	    selectedService: reservation.selectedService,
+	    startDate: reservation.startDate,
+	    endDate: reservation.endDate,
+	    startTime: reservation.startTime,
+	    endTime: reservation.endTime,
+	    dogName: reservation.dogName || '', // opcional, si en el futuro lo agregas
+	    dogAge: reservation.dogAge,
+	    dogWeight: reservation.dogWeight,
+	    notes: reservation.notes,
+	    totalPrice: reservation.totalPrice,
+	    reservationId,
+	  });
+	} catch (emailError) {
+	  console.error(`❌ Error sending receipt email for reservation ${reservationId}:`, emailError);
+	}
     } else {
       console.warn('⚠️ No reservationId provided, paymentStatus not updated');
     }
