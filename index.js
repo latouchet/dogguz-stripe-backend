@@ -43,6 +43,8 @@ app.use('/', getAccountStatus);
 app.post('/create-payment-intent', async (req, res) => {
   try {
     const { amount, providerStripeAccountId, applicationFee, reservationId } = req.body;
+    
+     console.log('📢 Request data:', req.body);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
