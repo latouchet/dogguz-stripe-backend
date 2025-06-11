@@ -27,6 +27,7 @@ const createStripeAccount = require('./routes/create-stripe-account');
 const getOnboardingLink = require('./routes/get-onboarding-link');
 const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
 const getAccountStatus = require('./routes/get-account-status');
+const captureDuePayments = require('./routes/capture-due-payments');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -34,17 +35,20 @@ console.log("🔐 Stripe secret key in use:", process.env.STRIPE_SECRET_KEY);
 
 app.use(cors());
 app.use(express.json());
+
+// Rutas "modulares"
 app.use('/', createStripeAccount);
 app.use('/', getOnboardingLink);
 app.use('/', getUidByStripeAccount);
 app.use('/', getAccountStatus);
+app.use('/', captureDuePayments); // << ESTE ES TU CRON! ✅
 
 // Crear PaymentIntent
 app.post('/create-payment-intent', async (req, res) => {
   try {
     const { amount, providerStripeAccountId, applicationFee, reservationId } = req.body;
-    
-     console.log('📢 Request data:', req.body);
+
+    console.log('📢 Request data:', req.body);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
@@ -160,5 +164,4 @@ app.post('/create-qr-payment', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
 
