@@ -29,6 +29,7 @@ const getUidByStripeAccount = require('./routes/get-uid-by-stripe-account');
 const getAccountStatus = require('./routes/get-account-status');
 const captureDuePayments = require('./routes/capture-due-payments');
 const sendReservationReceiptEmail = require('./routes/sendReservationReceiptEmail');
+const sendPremiumWelcomeEmail = require('./routes/sendPremiumWelcomeEmail');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -183,6 +184,54 @@ app.post('/create-qr-payment', async (req, res) => {
   } catch (error) {
     console.error('❌ Error creating PaymentIntent:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Crear suscripción mensual para Dogguz Premium
+app.post('/create-subscription', async (req, res) => {
+  try {
+    const { email, paymentMethodId, uid } = req.body;
+
+    if (!email || !paymentMethodId || !uid) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Crear cliente en Stripe
+    const customer = await stripe.customers.create({
+      email,
+      payment_method: paymentMethodId,
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+
+    // Crear suscripción mensual
+    const subscription = await stripe.subscriptions.create({
+      customer: customer.id,
+      items: [{ price: 'price_1Rb8yXFycPiM94OAMu8VqgSc' }],
+      expand: ['latest_invoice.payment_intent'],
+    });
+
+    const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
+
+    // Guardar en Firestore el estado de la membresía
+    const userRef = admin.firestore().collection('users').doc(uid);
+
+    await userRef.set({
+      membershipStatus: 'premium',
+      membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
+      stripeSubscriptionId: subscription.id,
+    }, { merge: true });
+    
+    await sendPremiumWelcomeEmail(email);
+
+    console.log(`🎉 User ${uid} upgraded to premium`);
+
+    res.json({ clientSecret });
+
+  } catch (error) {
+    console.error('❌ Error creating subscription:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
