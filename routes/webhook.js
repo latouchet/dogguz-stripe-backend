@@ -43,18 +43,24 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   // ✅ 2. Actualización de estado de suscripción
   else if (event.type === 'customer.subscription.updated') {
-    const subscription = event.data.object;
-    const subscriptionId = subscription.id;
-    const status = subscription.status;
+  const subscription = event.data.object;
+  const subscriptionId = subscription.id;
+  const status = subscription.status;
 
-    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update({ membershipStatus: status });
-      console.log(`🔄 User ${userDoc.id} status updated to ${status}.`);
-    } else {
-      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-    }
+  const mappedStatus = (status === 'active') ? 'premium' : status;
+
+  const usersRef = admin.firestore().collection('users');
+  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+
+  if (!querySnapshot.empty) {
+    const userDoc = querySnapshot.docs[0];
+    await userDoc.ref.update({
+      membershipStatus: mappedStatus,
+    });
+    console.log(`🔄 User ${userDoc.id} subscription status updated to ${mappedStatus}`);
+  } else {
+    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
+  }
   }
 
   // ✅ 3. Suscripción cancelada
