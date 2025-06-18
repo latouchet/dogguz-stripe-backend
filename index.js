@@ -31,6 +31,7 @@ const captureDuePayments = require('./routes/capture-due-payments');
 const sendReservationReceiptEmail = require('./routes/sendReservationReceiptEmail');
 const sendPremiumWelcomeEmail = require('./routes/sendPremiumWelcomeEmail');
 const webhookRoute = require('./routes/webhook');
+const cancelSubscriptionRoute = require('./routes/cancel-subscription');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
@@ -47,6 +48,7 @@ app.use('/', getOnboardingLink);
 app.use('/', getUidByStripeAccount);
 app.use('/', getAccountStatus);
 app.use('/', captureDuePayments); // << ESTE ES TU CRON! ✅
+app.use('/', cancelSubscriptionRoute);
 
 // Crear PaymentIntent
 app.post('/create-payment-intent', async (req, res) => {
