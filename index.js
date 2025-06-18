@@ -30,87 +30,13 @@ const getAccountStatus = require('./routes/get-account-status');
 const captureDuePayments = require('./routes/capture-due-payments');
 const sendReservationReceiptEmail = require('./routes/sendReservationReceiptEmail');
 const sendPremiumWelcomeEmail = require('./routes/sendPremiumWelcomeEmail');
+const webhookRoute = require('./routes/webhook');
 
 const app = express();
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 console.log("🔐 Stripe secret key in use:", process.env.STRIPE_SECRET_KEY);
 
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  const sig = req.headers['stripe-signature'];
-
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error('❌ Webhook signature verification failed.', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  console.log(`📩 Webhook received: ${event.type}`);
-
-  // 🔔 Lógica para invoice.payment_succeeded (Pago confirmado)
-  if (event.type === 'invoice.payment_succeeded') {
-    const subscriptionId = event.data.object.subscription;
-
-    if (!subscriptionId) {
-      console.warn('⚠️ No subscription ID found in invoice.payment_succeeded');
-      return res.status(200).send('No subscription ID.');
-    }
-
-    const usersRef = admin.firestore().collection('users');
-    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update({
-        membershipStatus: 'premium',
-        membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      console.log(`✅ User ${userDoc.id} upgraded to premium (payment_succeeded)`);
-    } else {
-      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-    }
-  }
-
-  // 🔔 Lógica para customer.subscription.updated (Cambio en la suscripción)
-  else if (event.type === 'customer.subscription.updated') {
-    const subscription = event.data.object;
-    const subscriptionId = subscription.id;
-    const status = subscription.status;
-
-    if (!subscriptionId) {
-      console.warn('⚠️ No subscription ID in subscription.updated');
-      return res.status(200).send('No subscription ID.');
-    }
-
-    const usersRef = admin.firestore().collection('users');
-    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update({
-        membershipStatus: status, // actualiza con el nuevo estado de Stripe
-      });
-      console.log(`🔄 User ${userDoc.id} subscription status updated to ${status}`);
-    } else {
-      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-    }
-  }
-
-  // 🔔 Lógica para invoice.paid (solo info adicional)
-  else if (event.type === 'invoice.paid') {
-    console.log('💰 Invoice paid event received. No action needed.');
-  }
-
-  // ✅ Para cualquier otro evento que no manejes específicamente
-  else {
-    console.log(`ℹ️ Event ${event.type} received but not handled specifically.`);
-  }
-
-  res.status(200).json({ received: true });
-});
+app.use(webhookRoute);
 
 app.use(cors());
 app.use(express.json());
