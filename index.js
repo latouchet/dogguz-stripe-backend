@@ -190,50 +190,48 @@ app.post('/create-qr-payment', async (req, res) => {
 // Crear suscripción mensual para Dogguz Premium
 app.post('/create-subscription', async (req, res) => {
   try {
-    const { email, paymentMethodId, uid } = req.body;
+    const { email, uid } = req.body;
 
-    if (!email || !paymentMethodId || !uid) {
+    if (!email || !uid) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Crear cliente en Stripe
-    const customer = await stripe.customers.create({
-      email,
-      payment_method: paymentMethodId,
-      invoice_settings: {
-        default_payment_method: paymentMethodId,
-      },
-    });
+    // 🔐 Buscar o crear cliente
+    const customers = await stripe.customers.list({ email, limit: 1 });
+    let customer;
 
-    // Crear suscripción mensual
+    if (customers.data.length > 0) {
+      customer = customers.data[0];
+    } else {
+      customer = await stripe.customers.create({ email });
+    }
+
+    // 📦 Crear suscripción con SetupIntent
     const subscription = await stripe.subscriptions.create({
       customer: customer.id,
-      items: [{ price: 'price_1Rb8yXFycPiM94OAMu8VqgSc' }],
+      items: [{ price: 'price_1Rb8yXFycPiM94OAMu8VqgSc' }], // reemplaza con tu price_id real
+      payment_behavior: 'default_incomplete',
       expand: ['latest_invoice.payment_intent'],
     });
 
     const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
 
-    // Guardar en Firestore el estado de la membresía
+    // ☁️ Guardar en Firestore estado "pending"
     const userRef = admin.firestore().collection('users').doc(uid);
-
     await userRef.set({
-      membershipStatus: 'premium',
-      membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
+      membershipStatus: 'pending',
       stripeSubscriptionId: subscription.id,
     }, { merge: true });
-    
-    await sendPremiumWelcomeEmail(email);
 
-    console.log(`🎉 User ${uid} upgraded to premium`);
-
+    console.log(`🔄 Created subscription for ${email}`);
     res.json({ clientSecret });
 
   } catch (error) {
-    console.error('❌ Error creating subscription:', error);
+    console.error('❌ Error in create-subscription:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
