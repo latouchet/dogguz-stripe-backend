@@ -49,14 +49,24 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   const mappedStatus = (status === 'active') ? 'premium' : status;
 
-  const usersRef = admin.firestore().collection('users');
   const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
 
   if (!querySnapshot.empty) {
     const userDoc = querySnapshot.docs[0];
-    await userDoc.ref.update({
+
+    const updateData = {
       membershipStatus: mappedStatus,
-    });
+    };
+
+    // Si se convierte en premium y no tiene fecha, la agregamos
+    if (mappedStatus === 'premium') {
+      const userData = userDoc.data();
+      if (!userData.membershipStartDate) {
+        updateData.membershipStartDate = admin.firestore.FieldValue.serverTimestamp();
+      }
+    }
+
+    await userDoc.ref.update(updateData);
     console.log(`🔄 User ${userDoc.id} subscription status updated to ${mappedStatus}`);
   } else {
     console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
