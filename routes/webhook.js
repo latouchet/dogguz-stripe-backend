@@ -24,25 +24,34 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   const usersRef = admin.firestore().collection('users');
 
   // ✅ 1. Pago confirmado
-  if (event.type === 'invoice.payment_succeeded') {
-    const subscriptionId = event.data.object.subscription;
-    if (!subscriptionId) return res.status(200).send('No subscription ID');
+if (event.type === 'invoice.payment_succeeded') {
+  const subscriptionId = event.data.object.subscription;
+  if (!subscriptionId) return res.status(200).send('No subscription ID');
 
-    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update({
-        membershipStatus: 'premium',
-        membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      console.log(`✅ User ${userDoc.id} upgraded to premium.`);
-    } else {
-      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-    }
+  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+  if (!querySnapshot.empty) {
+    const userDoc = querySnapshot.docs[0];
+    const userRef = userDoc.ref;
+
+    // Buscar la suscripción en Stripe para obtener current_period_end
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const periodEndUnix = subscription.current_period_end;
+    const periodEnd = new Date(periodEndUnix * 1000);
+
+    await userRef.update({
+      membershipStatus: 'premium',
+      membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
+      membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd),
+    });
+
+    console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${periodEnd}`);
+  } else {
+    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
   }
+}
 
-  // ✅ 2. Actualización de estado de suscripción
-  else if (event.type === 'customer.subscription.updated') {
+// ✅ 2. Actualización de estado de suscripción
+else if (event.type === 'customer.subscription.updated') {
   const subscription = event.data.object;
   const subscriptionId = subscription.id;
   const status = subscription.status;
@@ -53,25 +62,31 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   if (!querySnapshot.empty) {
     const userDoc = querySnapshot.docs[0];
+    const userRef = userDoc.ref;
 
     const updateData = {
       membershipStatus: mappedStatus,
     };
 
-    // Si se convierte en premium y no tiene fecha, la agregamos
+    // Si es premium, actualiza también la fecha de corte
     if (mappedStatus === 'premium') {
+      const periodEndUnix = subscription.current_period_end;
+      const periodEnd = new Date(periodEndUnix * 1000);
+      updateData.membershipCancelAt = admin.firestore.Timestamp.fromDate(periodEnd);
+
+      // Agregar fecha de inicio si no existe
       const userData = userDoc.data();
       if (!userData.membershipStartDate) {
         updateData.membershipStartDate = admin.firestore.FieldValue.serverTimestamp();
       }
     }
 
-    await userDoc.ref.update(updateData);
+    await userRef.update(updateData);
     console.log(`🔄 User ${userDoc.id} subscription status updated to ${mappedStatus}`);
   } else {
     console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
   }
-  }
+}
 
   // ✅ 3. Suscripción cancelada
   else if (event.type === 'customer.subscription.deleted') {
@@ -82,13 +97,13 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
     console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
   } else {
-    const periodEnd = periodEndUnix * 1000; // convertir a milisegundos
+    const periodEnd = new Date(periodEndUnix * 1000); 
     const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
 
     if (!querySnapshot.empty) {
       const userDoc = querySnapshot.docs[0];
       await userDoc.ref.update({
-        membershipCancelAt: periodEnd,
+        membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd),
         membershipStatus: 'inactive', // ✅ Opción recomendada
       });
 
