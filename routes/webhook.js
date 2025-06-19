@@ -20,99 +20,92 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   }
 
   console.log(`📩 Webhook event received: ${event.type}`);
-
   const usersRef = admin.firestore().collection('users');
 
   // ✅ 1. Pago confirmado
-if (event.type === 'invoice.payment_succeeded') {
-  const subscriptionId = event.data.object.subscription;
-  if (!subscriptionId) return res.status(200).send('No subscription ID');
+  if (event.type === 'invoice.payment_succeeded') {
+    const subscriptionId = event.data.object.subscription;
+    if (!subscriptionId) return res.status(200).send('No subscription ID');
 
-  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-  if (!querySnapshot.empty) {
-    const userDoc = querySnapshot.docs[0];
-    const userRef = userDoc.ref;
+    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0];
+      const userRef = userDoc.ref;
 
-    // Buscar la suscripción en Stripe para obtener current_period_end
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const periodEndUnix = subscription.current_period_end;
-    const periodEnd = new Date(periodEndUnix * 1000);
-
-    await userRef.update({
-      membershipStatus: 'premium',
-      membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
-      membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd),
-    });
-
-    console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${periodEnd}`);
-  } else {
-    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-  }
-}
-
-// ✅ 2. Actualización de estado de suscripción
-else if (event.type === 'customer.subscription.updated') {
-  const subscription = event.data.object;
-  const subscriptionId = subscription.id;
-  const status = subscription.status;
-
-  const mappedStatus = (status === 'active') ? 'premium' : status;
-
-  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-
-  if (!querySnapshot.empty) {
-    const userDoc = querySnapshot.docs[0];
-    const userRef = userDoc.ref;
-
-    const updateData = {
-      membershipStatus: mappedStatus,
-    };
-
-    // Si es premium, actualiza también la fecha de corte
-    if (mappedStatus === 'premium') {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       const periodEndUnix = subscription.current_period_end;
-      const periodEnd = new Date(periodEndUnix * 1000);
-      updateData.membershipCancelAt = admin.firestore.Timestamp.fromDate(periodEnd);
+      const periodEnd = new Date(periodEndUnix * 1000); // ✅
 
-      // Agregar fecha de inicio si no existe
-      const userData = userDoc.data();
-      if (!userData.membershipStartDate) {
-        updateData.membershipStartDate = admin.firestore.FieldValue.serverTimestamp();
-      }
+      await userRef.update({
+        membershipStatus: 'premium',
+        membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
+        membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd), // ✅
+      });
+
+      console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${periodEnd}`);
+    } else {
+      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
     }
-
-    await userRef.update(updateData);
-    console.log(`🔄 User ${userDoc.id} subscription status updated to ${mappedStatus}`);
-  } else {
-    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
   }
-}
 
-  // ✅ 3. Suscripción cancelada
-  else if (event.type === 'customer.subscription.deleted') {
-  const subscription = event.data.object;
-  const subscriptionId = subscription.id;
-  const periodEndUnix = subscription.current_period_end;
+  // ✅ 2. Actualización de estado de suscripción
+  else if (event.type === 'customer.subscription.updated') {
+    const subscription = event.data.object;
+    const subscriptionId = subscription.id;
+    const status = subscription.status;
 
-  if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
-    console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
-  } else {
-    const periodEnd = new Date(periodEndUnix * 1000); 
+    const mappedStatus = (status === 'active') ? 'premium' : status;
     const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
 
     if (!querySnapshot.empty) {
       const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update({
-        membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd),
-        membershipStatus: 'inactive', // ✅ Opción recomendada
-      });
+      const userRef = userDoc.ref;
 
-      const isoDate = new Date(periodEnd).toISOString();
-      console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${isoDate}`);
+      const updateData = { membershipStatus: mappedStatus };
+
+      if (mappedStatus === 'premium') {
+        const periodEndUnix = subscription.current_period_end;
+        const periodEnd = new Date(periodEndUnix * 1000); // ✅
+        updateData.membershipCancelAt = admin.firestore.Timestamp.fromDate(periodEnd);
+
+        const userData = userDoc.data();
+        if (!userData.membershipStartDate) {
+          updateData.membershipStartDate = admin.firestore.FieldValue.serverTimestamp();
+        }
+      }
+
+      await userRef.update(updateData);
+      console.log(`🔄 User ${userDoc.id} subscription status updated to ${mappedStatus}`);
     } else {
       console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
     }
-   }
+  }
+
+  // ✅ 3. Suscripción cancelada
+  else if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object;
+    const subscriptionId = subscription.id;
+    const periodEndUnix = subscription.current_period_end;
+
+    if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
+      console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
+    } else {
+      const periodEnd = new Date(periodEndUnix * 1000); // ✅
+      const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        await userDoc.ref.update({
+          membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd),
+          membershipStatus: 'inactive',
+        });
+
+        const isoDate = new Date(periodEnd).toISOString();
+        console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${isoDate}`);
+      } else {
+        console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
+      }
+    }
   }
 
   // ✅ 4. Pago fallido
@@ -137,7 +130,7 @@ else if (event.type === 'customer.subscription.updated') {
     console.log('💰 Invoice paid. No action taken.');
   }
 
-  // Otros eventos que no necesitas manejar
+  // Otros eventos no manejados
   else {
     console.log(`ℹ️ Unhandled event: ${event.type}`);
   }
@@ -146,3 +139,4 @@ else if (event.type === 'customer.subscription.updated') {
 });
 
 module.exports = router;
+
