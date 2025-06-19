@@ -34,15 +34,16 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       const periodEndUnix = subscription.current_period_end;
-      const periodEnd = new Date(periodEndUnix * 1000); // ✅
+      const periodEndMs = Math.floor(periodEndUnix * 1000);
+      const periodEndTimestamp = admin.firestore.Timestamp.fromMillis(periodEndMs);
 
       await userRef.update({
         membershipStatus: 'premium',
         membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
-        membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd), // ✅
+        membershipCancelAt: periodEndTimestamp,
       });
 
-      console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${periodEnd}`);
+      console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${new Date(periodEndMs).toISOString()}`);
     } else {
       console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
     }
@@ -65,8 +66,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
       if (mappedStatus === 'premium') {
         const periodEndUnix = subscription.current_period_end;
-        const periodEnd = new Date(periodEndUnix * 1000); // ✅
-        updateData.membershipCancelAt = admin.firestore.Timestamp.fromDate(periodEnd);
+        const periodEndMs = Math.floor(periodEndUnix * 1000);
+        updateData.membershipCancelAt = admin.firestore.Timestamp.fromMillis(periodEndMs);
 
         const userData = userDoc.data();
         if (!userData.membershipStartDate) {
@@ -90,18 +91,19 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
       console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
     } else {
-      const periodEnd = new Date(periodEndUnix * 1000); // ✅
+      const periodEndMs = Math.floor(periodEndUnix * 1000);
+      const periodEndTimestamp = admin.firestore.Timestamp.fromMillis(periodEndMs);
+
       const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
 
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
         await userDoc.ref.update({
-          membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEnd),
+          membershipCancelAt: periodEndTimestamp,
           membershipStatus: 'inactive',
         });
 
-        const isoDate = new Date(periodEnd).toISOString();
-        console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${isoDate}`);
+        console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${new Date(periodEndMs).toISOString()}`);
       } else {
         console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
       }
