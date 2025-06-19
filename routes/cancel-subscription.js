@@ -27,17 +27,29 @@ router.post('/cancel-subscription', async (req, res) => {
       return res.status(400).json({ error: 'Missing subscription ID in user data' });
     }
 
+    // Cancelar la suscripción en Stripe
     const canceled = await stripe.subscriptions.del(stripeSubscriptionId);
 
-    // Actualiza Firestore con estado inactivo y marca la fecha de cancelación
+    // Obtener el final del periodo de facturación
+    const periodEndUnix = canceled.current_period_end;
+
+    if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
+      console.warn(`⚠️ Invalid period_end for subscription ${stripeSubscriptionId}`);
+      return res.status(500).json({ error: 'Invalid period_end returned from Stripe' });
+    }
+
+    const periodEndDate = new Date(periodEndUnix * 1000); // convertir a Date
+
+    // ✅ No cambiar membershipStatus aquí
     await userRef.update({
-      membershipStatus: 'inactive',
-      membershipCancelAt: admin.firestore.Timestamp.now(),
+      membershipCancelAt: admin.firestore.Timestamp.fromDate(periodEndDate),
     });
 
-    console.log(`🛑 Subscription ${stripeSubscriptionId} canceled for user ${uid}`);
-    res.json({ success: true, canceled });
+    const isoDate = periodEndDate.toISOString();
+    console.log(`🗓️ Subscription will remain active until ${isoDate} for user ${uid}`);
+    console.log(`🛑 Stripe subscription ${stripeSubscriptionId} canceled for user ${uid}`);
 
+    res.json({ success: true, canceled });
   } catch (error) {
     console.error('❌ Error canceling subscription:', error);
     res.status(500).json({ error: error.message });

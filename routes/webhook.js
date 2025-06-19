@@ -77,18 +77,27 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   else if (event.type === 'customer.subscription.deleted') {
   const subscription = event.data.object;
   const subscriptionId = subscription.id;
-  const periodEnd = subscription.current_period_end * 1000; // Convertir a milisegundos
+  const periodEndUnix = subscription.current_period_end;
 
-  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-  if (!querySnapshot.empty) {
-    const userDoc = querySnapshot.docs[0];
-    await userDoc.ref.update({
-      membershipCancelAt: periodEnd,
-    });
-    console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${new Date(periodEnd).toISOString()}`);
+  if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
+    console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
   } else {
-    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-  }
+    const periodEnd = periodEndUnix * 1000; // convertir a milisegundos
+    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0];
+      await userDoc.ref.update({
+        membershipCancelAt: periodEnd,
+        membershipStatus: 'inactive', // ✅ Opción recomendada
+      });
+
+      const isoDate = new Date(periodEnd).toISOString();
+      console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${isoDate}`);
+    } else {
+      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
+    }
+   }
   }
 
   // ✅ 4. Pago fallido
