@@ -5,7 +5,6 @@ const admin = require('firebase-admin');
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Webhook endpoint
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const sig = req.headers['stripe-signature'];
@@ -34,16 +33,21 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       const periodEndUnix = subscription.current_period_end;
-      const periodEndMs = Math.floor(periodEndUnix * 1000);
-      const periodEndTimestamp = admin.firestore.Timestamp.fromMillis(periodEndMs);
 
-      await userRef.update({
-        membershipStatus: 'premium',
-        membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
-        membershipCancelAt: periodEndTimestamp,
-      });
+      if (typeof periodEndUnix === 'number') {
+        const periodEndMs = Math.floor(periodEndUnix * 1000);
+        const periodEndTimestamp = admin.firestore.Timestamp.fromMillis(periodEndMs);
 
-      console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${new Date(periodEndMs).toISOString()}`);
+        await userRef.update({
+          membershipStatus: 'premium',
+          membershipStartDate: admin.firestore.FieldValue.serverTimestamp(),
+          membershipCancelAt: periodEndTimestamp,
+        });
+
+        console.log(`✅ User ${userDoc.id} upgraded to premium. Ends at ${new Date(periodEndMs).toISOString()}`);
+      } else {
+        console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
+      }
     } else {
       console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
     }
@@ -66,8 +70,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
       if (mappedStatus === 'premium') {
         const periodEndUnix = subscription.current_period_end;
-        const periodEndMs = Math.floor(periodEndUnix * 1000);
-        updateData.membershipCancelAt = admin.firestore.Timestamp.fromMillis(periodEndMs);
+        if (typeof periodEndUnix === 'number') {
+          const periodEndMs = Math.floor(periodEndUnix * 1000);
+          updateData.membershipCancelAt = admin.firestore.Timestamp.fromMillis(periodEndMs);
+        }
 
         const userData = userDoc.data();
         if (!userData.membershipStartDate) {
@@ -88,9 +94,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const subscriptionId = subscription.id;
     const periodEndUnix = subscription.current_period_end;
 
-    if (typeof periodEndUnix !== 'number' || isNaN(periodEndUnix)) {
-      console.warn(`⚠️ Invalid period_end for subscription ${subscriptionId}`);
-    } else {
+    if (typeof periodEndUnix === 'number') {
       const periodEndMs = Math.floor(periodEndUnix * 1000);
       const periodEndTimestamp = admin.firestore.Timestamp.fromMillis(periodEndMs);
 
@@ -107,6 +111,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       } else {
         console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
       }
+    } else {
+      console.warn(`⚠️ Invalid period_end on delete for subscription ${subscriptionId}`);
     }
   }
 
