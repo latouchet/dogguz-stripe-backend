@@ -75,18 +75,20 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   // ✅ 3. Suscripción cancelada
   else if (event.type === 'customer.subscription.deleted') {
-    const subscriptionId = event.data.object.id;
+  const subscription = event.data.object;
+  const subscriptionId = subscription.id;
+  const periodEnd = subscription.current_period_end * 1000; // Convertir a milisegundos
 
-    const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-    if (!querySnapshot.empty) {
-      const userDoc = querySnapshot.docs[0];
-      await userDoc.ref.update({
-        membershipStatus: 'inactive',
-      });
-      console.log(`❌ User ${userDoc.id} subscription canceled.`);
-    } else {
-      console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-    }
+  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+  if (!querySnapshot.empty) {
+    const userDoc = querySnapshot.docs[0];
+    await userDoc.ref.update({
+      membershipCancelAt: periodEnd,
+    });
+    console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${new Date(periodEnd).toISOString()}`);
+  } else {
+    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
+  }
   }
 
   // ✅ 4. Pago fallido
