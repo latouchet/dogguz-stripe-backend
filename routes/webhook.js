@@ -89,31 +89,34 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   }
 
   // ✅ 3. Suscripción cancelada
-  else if (event.type === 'customer.subscription.deleted') {
-    const subscription = event.data.object;
-    const subscriptionId = subscription.id;
-    const periodEndUnix = subscription.current_period_end;
+ else if (event.type === 'customer.subscription.deleted') {
+  const subscription = event.data.object;
+  const subscriptionId = subscription.id;
+  const periodEndUnix = subscription.current_period_end;
 
-    if (typeof periodEndUnix === 'number') {
+  const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
+
+  if (!querySnapshot.empty) {
+    const userDoc = querySnapshot.docs[0];
+    const userRef = userDoc.ref;
+
+    const updateData = {
+      membershipStatus: 'inactive',
+    };
+
+    if (typeof periodEndUnix === 'number' && !isNaN(periodEndUnix)) {
       const periodEndMs = Math.floor(periodEndUnix * 1000);
-      const periodEndTimestamp = admin.firestore.Timestamp.fromMillis(periodEndMs);
-
-      const querySnapshot = await usersRef.where('stripeSubscriptionId', '==', subscriptionId).get();
-
-      if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        await userDoc.ref.update({
-          membershipCancelAt: periodEndTimestamp,
-          membershipStatus: 'inactive',
-        });
-
-        console.log(`❌ User ${userDoc.id} subscription canceled, valid until ${new Date(periodEndMs).toISOString()}`);
-      } else {
-        console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
-      }
+      updateData.membershipCancelAt = admin.firestore.Timestamp.fromMillis(periodEndMs);
+      console.log(`🗓️ Subscription will remain active until ${new Date(periodEndMs).toISOString()} for user ${userDoc.id}`);
     } else {
-      console.warn(`⚠️ Invalid period_end on delete for subscription ${subscriptionId}`);
+      console.warn(`⚠️ No period_end on delete for subscription ${subscriptionId}`);
     }
+
+    await userRef.update(updateData);
+    console.log(`🛑 Stripe subscription ${subscriptionId} canceled for user ${userDoc.id}`);
+  } else {
+    console.warn(`⚠️ No user found with subscriptionId: ${subscriptionId}`);
+  }
   }
 
   // ✅ 4. Pago fallido
