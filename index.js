@@ -65,6 +65,7 @@ app.post('/create-payment-intent', async (req, res) => {
       transfer_data: {
         destination: providerStripeAccountId,
       },
+      receipt_email: ownerEmail,
     });
 
     if (reservationId) {
