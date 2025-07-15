@@ -23,6 +23,9 @@ router.post('/validate-receipt', async (req, res) => {
   };
 
   try {
+  console.log('✅ Validación exitosa. Guardando en Firestore...');
+  console.log('🕒 Fecha de expiración:', expirationDate.toISOString());
+
   // 1️⃣ Intentar validar contra producción
   let response = await axios.post(APPLE_PRODUCTION_URL, payload);
   let data = response.data;
@@ -59,6 +62,7 @@ router.post('/validate-receipt', async (req, res) => {
   // 6️⃣ Guardar en Firestore
   const userRef = admin.firestore().collection('users').doc(uid);
   await userRef.set({
+  console.log('✅ Firestore actualizado para UID:', uid);
     membershipStatus: 'premium',
     membershipCancelAt: admin.firestore.Timestamp.fromDate(expirationDate),
     membershipValidatedBy: 'apple',
