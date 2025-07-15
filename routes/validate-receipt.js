@@ -23,9 +23,7 @@ router.post('/validate-receipt', async (req, res) => {
   };
 
   try {
-  console.log('✅ Validación exitosa. Guardando en Firestore...');
-  console.log('🕒 Fecha de expiración:', expirationDate.toISOString());
-
+  
   // 1️⃣ Intentar validar contra producción
   let response = await axios.post(APPLE_PRODUCTION_URL, payload);
   let data = response.data;
@@ -54,10 +52,13 @@ router.post('/validate-receipt', async (req, res) => {
 
   // 5️⃣ Calcular expiración
   const expirationDate = new Date(
-    productId === '	dogguz.appstore.annuall'
+    productId === 'dogguz.appstore.annuall'
       ? purchaseDate.setFullYear(purchaseDate.getFullYear() + 1)
       : purchaseDate.setMonth(purchaseDate.getMonth() + 1)
   );
+  
+  console.log('✅ Validación exitosa. Guardando en Firestore...');
+  console.log('🕒 Fecha de expiración:', expirationDate.toISOString());
 
   // 6️⃣ Guardar en Firestore
   const userRef = admin.firestore().collection('users').doc(uid);
