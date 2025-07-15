@@ -54,7 +54,7 @@ router.post('/validate-receipt', async (req, res) => {
 
   // 5️⃣ Calcular expiración
   const expirationDate = new Date(
-    productId === 'dogguz.appstore.annual'
+    productId === '	dogguz.appstore.annuall'
       ? purchaseDate.setFullYear(purchaseDate.getFullYear() + 1)
       : purchaseDate.setMonth(purchaseDate.getMonth() + 1)
   );
@@ -62,12 +62,13 @@ router.post('/validate-receipt', async (req, res) => {
   // 6️⃣ Guardar en Firestore
   const userRef = admin.firestore().collection('users').doc(uid);
   await userRef.set({
-   console.log('✅ Firestore actualizado para UID: ' + uid);
     membershipStatus: 'premium',
     membershipCancelAt: admin.firestore.Timestamp.fromDate(expirationDate),
     membershipValidatedBy: 'apple',
     membershipProductId: productId,
   }, { merge: true });
+  
+  console.log('✅ Firestore actualizado para UID: ' + uid);
 
   return res.json({ success: true });
 
